@@ -1,46 +1,110 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Microsoft.Extensions.Caching.Distributed;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
-builder.Services.AddStackExchangeRedisCache(options =>
+builder.Services.AddCors(opts =>
 {
-    options.Configuration = builder.Configuration.GetConnectionString("redis");
+    opts.AddDefaultPolicy(policy =>
+    {
+        policy.AllowAnyHeader();
+        policy.AllowAnyMethod();
+        policy.AllowAnyOrigin();
+    });
 });
-
+builder.Services.AddStackExchangeRedisCache(options => { options.Configuration = builder.Configuration.GetConnectionString("redis"); });
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+app.UseCors();
+app.MapOpenApi();
+app.UseSwaggerUI(opts =>
 {
-    app.MapOpenApi();
-}
+    opts.SwaggerEndpoint("/openapi/v1.json", "RT-NET API");
+});
 
-app.UseHttpsRedirection();
+app.MapPost("/clear", async (IDistributedCache cache) => await cache.SetStringAsync("messages", "[]"));
 
-var summaries = new[]
+app.MapGet("/messages", async (IDistributedCache cache) =>
 {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+    var messagesJson = await cache.GetStringAsync("messages");
 
-app.MapGet("/weatherforecast", () =>
+    if (string.IsNullOrEmpty(messagesJson))
     {
-        var forecast = Enumerable.Range(1, 5).Select(index =>
-                new WeatherForecast
-                (
-                    DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-                    Random.Shared.Next(-20, 55),
-                    summaries[Random.Shared.Next(summaries.Length)]
-                ))
-            .ToArray();
-        return forecast;
-    })
-    .WithName("GetWeatherForecast");
+        return Results.Ok(Array.Empty<Message>());
+    }
+
+    var messages = JsonSerializer.Deserialize<List<Message>>(messagesJson)!;
+    return Results.Ok(messages);
+});
+
+app.MapPost("/messages", async (MessageRequest messageRequest, IDistributedCache cache) =>
+{
+    var message = new Message
+    {
+        Id = Guid.CreateVersion7().ToString(),
+        Text = messageRequest.Text,
+        Name = messageRequest.Name
+    };
+
+    var messagesJson = await cache.GetStringAsync("messages");
+    List<Message> messages = [];
+
+    if (!string.IsNullOrEmpty(messagesJson))
+    {
+        messages = JsonSerializer.Deserialize<List<Message>>(messagesJson)!;
+    }
+
+    messages.Add(message);
+
+    var updatedMessagesJson = JsonSerializer.Serialize(messages);
+    await cache.SetStringAsync("messages", updatedMessagesJson);
+
+    return Results.Created($"/messages/{message.Id}", message);
+});
+
+app.MapGet("/messages/{id}", async (string id, IDistributedCache cache) =>
+{
+    var messagesJson = await cache.GetStringAsync("messages");
+
+    if (string.IsNullOrEmpty(messagesJson))
+    {
+        return Results.NotFound($"Message with ID {id} not found");
+    }
+
+    var messages = JsonSerializer.Deserialize<List<Message>>(messagesJson)!;
+    var message = messages.FirstOrDefault(m => m.Id == id);
+
+    if (message == null)
+    {
+        return Results.NotFound($"Message with ID {id} not found");
+    }
+
+    return Results.Ok(message);
+});
 
 app.Run();
 
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
+class MessageRequest
 {
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+    [JsonPropertyName("text")]
+    public required string Text { get; set; }
+
+    [JsonPropertyName("name")]
+    public required string Name { get; set; }
+}
+
+class Message
+{
+    [JsonPropertyName("id")]
+    public required string Id { get; set; }
+
+    [JsonPropertyName("text")]
+    public required string Text { get; set; }
+
+    [JsonPropertyName("name")]
+    public required string Name { get; set; }
 }

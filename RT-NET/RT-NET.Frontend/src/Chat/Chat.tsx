@@ -1,13 +1,31 @@
 ﻿import { useState, useRef, useEffect } from 'react';
 import './Chat.css';
+import API_ROUTES from "../Common/Commons";
+
+interface Message {
+  id: number;
+  text: string;
+  name: string;
+  owner: boolean;
+}
 
 function Chat({ userName, onLogout }) {
-  const [messages, setMessages] = useState([
-    { id: 1, text: 'Hello!', name: 'Assistant', owner: false },
-    { id: 2, text: `Hi ${userName}! How can I help you today?`, name: 'Assistant', owner: false },
-  ]);
-  const [newMessage, setNewMessage] = useState('');
-  const messagesEndRef = useRef(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState<string>('');
+  const messagesEndRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const getData = async ()=>{
+      const response = await fetch(API_ROUTES.MESSAGES.BASE);
+      const data = await response.json() as Message[];
+      data.forEach(mess=>{
+        mess.owner = mess.name === userName;
+      });
+      setMessages(data);
+    }
+
+    getData();
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
@@ -17,36 +35,34 @@ function Chat({ userName, onLogout }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (newMessage.trim() === '') return;
 
-    // Add user message
-    const userMessage = {
-      id: messages.length + 1,
-      text: newMessage,
-      name: userName,
+    const response = await fetch(API_ROUTES.MESSAGES.BASE, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        text: newMessage,
+        name: userName
+      })
+    });
+    const responseJson = await response.json() as Message;
+
+    setMessages([...messages, {
+      id: responseJson.id,
+      name: responseJson.name,
+      text: responseJson.text,
       owner: true
-    };
-
-    setMessages([...messages, userMessage]);
+    }]);
     setNewMessage('');
-
-    // Simulate a response after a short delay
-    setTimeout(() => {
-      const botMessage = {
-        id: messages.length + 2,
-        text: `I received your message: "${newMessage}"`,
-        name: 'Assistant',
-        owner: false
-      };
-      setMessages(prevMessages => [...prevMessages, botMessage]);
-    }, 1000);
   };
 
-  const handleKeyPress = (e) => {
+  const handleKeyPress = async (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSendMessage();
+      await handleSendMessage();
     }
   };
 
