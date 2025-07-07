@@ -1,8 +1,9 @@
-using System.Net.ServerSentEvents;
-using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.WebSockets;
 using Microsoft.Extensions.Caching.Distributed;
+using RT_NET.Api;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,6 +19,12 @@ builder.Services.AddCors(opts =>
     });
 });
 builder.Services.AddStackExchangeRedisCache(options => { options.Configuration = builder.Configuration.GetConnectionString("redis"); });
+builder.Services.AddWebSockets(opts =>
+{
+    opts.KeepAliveInterval = TimeSpan.FromMinutes(1);
+});
+builder.Services.AddSingleton<WebSocketConnectionManager>();
+builder.Services.AddSingleton<WebSocketHandler>();
 
 var app = builder.Build();
 
@@ -88,43 +95,22 @@ app.MapGet("/messages/{id}", async (string id, IDistributedCache cache) =>
     return Results.Ok(message);
 });
 
-app.MapGet("/messages-sse", (IDistributedCache cache, CancellationToken cancellationToken) =>
+app.UseWebSockets();
+
+app.Map("/ws", async context =>
 {
-    async IAsyncEnumerable<SseItem<Message>> GetMessages([EnumeratorCancellation] CancellationToken ct)
+    if (context.WebSockets.IsWebSocketRequest)
     {
-        var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
-        HashSet<string> previousMessageIds = [];
-
-        while (!ct.IsCancellationRequested && await timer.WaitForNextTickAsync(ct))
-        {
-            var messagesJson = await cache.GetStringAsync("messages", ct);
-            if (string.IsNullOrEmpty(messagesJson))
-            {
-                continue;
-            }
-            var messages = JsonSerializer.Deserialize<List<Message>>(messagesJson)!;
-            var newMessages = messages.Where(m => !previousMessageIds.Contains(m.Id)).ToArray();
-
-            if (newMessages.Length > 0)
-            {
-                foreach (var id in newMessages.Select(x => x.Id))
-                {
-                    previousMessageIds.Add(id);
-                }
-
-                foreach (var message in newMessages)
-                {
-                    yield return new SseItem<Message>(message)
-                    {
-                        ReconnectionInterval = TimeSpan.FromSeconds(10)
-                    };
-                }
-            }
-        }
+        using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
+        var handler = context.RequestServices.GetRequiredService<WebSocketHandler>();
+        await handler.HandleConnection(webSocket);
     }
-
-    return TypedResults.ServerSentEvents(GetMessages(cancellationToken));
+    else
+    {
+        context.Response.StatusCode = 400;
+    }
 });
+
 
 app.Run();
 

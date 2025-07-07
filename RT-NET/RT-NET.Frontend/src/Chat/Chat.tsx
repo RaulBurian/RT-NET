@@ -14,7 +14,7 @@ function Chat({ userName, onLogout }) {
   const currentMessages = useRef<Message[]>(messages);
   const [newMessage, setNewMessage] = useState<string>('');
   const messagesEndRef = useRef<HTMLElement>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const webSocketRef = useRef<WebSocket>(null);
 
   useEffect(() => {
     const getData = async ()=>{
@@ -28,26 +28,33 @@ function Chat({ userName, onLogout }) {
 
     getData();
 
-    const sseUrl = `${API_ROUTES.MESSAGES.BASE}-sse`;
-    eventSourceRef.current = new EventSource(sseUrl);
+    const ws = new WebSocket('ws://localhost:5000/ws');
+    webSocketRef.current = ws;
 
-    eventSourceRef.current.onmessage = (event) => {
-      const newMessage = JSON.parse(event.data) as Message;
-      newMessage.owner = newMessage.name === userName;
+    ws.addEventListener('open', (event) => {
+      console.log('Connected to WebSocket server');
+    });
 
-      if (currentMessages.current.filter(mess => mess.id === newMessage.id).length > 0) {
-        return;
-      }
+    ws.addEventListener('message', (event) => {
+      const message = JSON.parse(JSON.parse(event.data)) as Message;
 
-      setMessages(prevMessages => [...prevMessages, newMessage]);
-    };
+      setMessages(prevMessages => {
+        if (prevMessages.some(m => m.id === message.id)) {
+          return prevMessages;
+        }
+
+        message.owner = message.name === userName;
+        return [...prevMessages, message];
+      });
+
+    });
 
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
       }
     }
-  }, []);
+  }, [userName]);
 
   useEffect(() => {
     currentMessages.current = messages;
@@ -61,24 +68,11 @@ function Chat({ userName, onLogout }) {
   const handleSendMessage = async () => {
     if (newMessage.trim() === '') return;
 
-    const response = await fetch(API_ROUTES.MESSAGES.BASE, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        text: newMessage,
-        name: userName
-      })
-    });
-    const responseJson = await response.json() as Message;
+    webSocketRef.current.send(JSON.stringify({
+      text: newMessage,
+      name: userName
+    }));
 
-    setMessages([...messages, {
-      id: responseJson.id,
-      name: responseJson.name,
-      text: responseJson.text,
-      owner: true
-    }]);
     setNewMessage('');
   };
 
