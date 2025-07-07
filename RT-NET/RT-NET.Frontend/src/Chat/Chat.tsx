@@ -11,8 +11,10 @@ interface Message {
 
 function Chat({ userName, onLogout }) {
   const [messages, setMessages] = useState<Message[]>([]);
+  const currentMessages = useRef<Message[]>(messages);
   const [newMessage, setNewMessage] = useState<string>('');
   const messagesEndRef = useRef<HTMLElement>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     const getData = async ()=>{
@@ -26,10 +28,29 @@ function Chat({ userName, onLogout }) {
 
     getData();
 
-    setInterval(getData, 3000);
+    const sseUrl = `${API_ROUTES.MESSAGES.BASE}-sse`;
+    eventSourceRef.current = new EventSource(sseUrl);
+
+    eventSourceRef.current.onmessage = (event) => {
+      const newMessage = JSON.parse(event.data) as Message;
+      newMessage.owner = newMessage.name === userName;
+
+      if (currentMessages.current.filter(mess => mess.id === newMessage.id).length > 0) {
+        return;
+      }
+
+      setMessages(prevMessages => [...prevMessages, newMessage]);
+    };
+
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    }
   }, []);
 
   useEffect(() => {
+    currentMessages.current = messages;
     scrollToBottom();
   }, [messages]);
 

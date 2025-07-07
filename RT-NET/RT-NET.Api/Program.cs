@@ -1,3 +1,5 @@
+using System.Net.ServerSentEvents;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Caching.Distributed;
@@ -84,6 +86,44 @@ app.MapGet("/messages/{id}", async (string id, IDistributedCache cache) =>
     }
 
     return Results.Ok(message);
+});
+
+app.MapGet("/messages-sse", (IDistributedCache cache, CancellationToken cancellationToken) =>
+{
+    async IAsyncEnumerable<SseItem<Message>> GetMessages([EnumeratorCancellation] CancellationToken ct)
+    {
+        var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+        HashSet<string> previousMessageIds = [];
+
+        while (!ct.IsCancellationRequested && await timer.WaitForNextTickAsync(ct))
+        {
+            var messagesJson = await cache.GetStringAsync("messages", ct);
+            if (string.IsNullOrEmpty(messagesJson))
+            {
+                continue;
+            }
+            var messages = JsonSerializer.Deserialize<List<Message>>(messagesJson)!;
+            var newMessages = messages.Where(m => !previousMessageIds.Contains(m.Id)).ToArray();
+
+            if (newMessages.Length > 0)
+            {
+                foreach (var id in newMessages.Select(x => x.Id))
+                {
+                    previousMessageIds.Add(id);
+                }
+
+                foreach (var message in newMessages)
+                {
+                    yield return new SseItem<Message>(message)
+                    {
+                        ReconnectionInterval = TimeSpan.FromSeconds(10)
+                    };
+                }
+            }
+        }
+    }
+
+    return TypedResults.ServerSentEvents(GetMessages(cancellationToken));
 });
 
 app.Run();
