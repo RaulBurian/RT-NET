@@ -1,5 +1,3 @@
-using System.Net.ServerSentEvents;
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Caching.Distributed;
@@ -88,42 +86,40 @@ app.MapGet("/messages/{id}", async (string id, IDistributedCache cache) =>
     return Results.Ok(message);
 });
 
-app.MapGet("/messages-sse", (IDistributedCache cache, CancellationToken cancellationToken) =>
+app.MapGet("/messages-sse", async (HttpContext context, IDistributedCache cache, CancellationToken cancellationToken) =>
 {
-    async IAsyncEnumerable<SseItem<Message>> GetMessages([EnumeratorCancellation] CancellationToken ct)
+    context.Response.Headers.Append("Content-Type", "text/event-stream");
+    context.Response.Headers.Append("Cache-Control", "no-cache");
+    context.Response.Headers.Append("Connection", "keep-alive");
+
+    var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+    HashSet<string> previousMessageIds = [];
+
+    while (!cancellationToken.IsCancellationRequested && await timer.WaitForNextTickAsync(cancellationToken))
     {
-        var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
-        HashSet<string> previousMessageIds = [];
-
-        while (!ct.IsCancellationRequested && await timer.WaitForNextTickAsync(ct))
+        var messagesJson = await cache.GetStringAsync("messages", cancellationToken);
+        if (string.IsNullOrEmpty(messagesJson))
         {
-            var messagesJson = await cache.GetStringAsync("messages", ct);
-            if (string.IsNullOrEmpty(messagesJson))
-            {
-                continue;
-            }
-            var messages = JsonSerializer.Deserialize<List<Message>>(messagesJson)!;
-            var newMessages = messages.Where(m => !previousMessageIds.Contains(m.Id)).ToArray();
+            continue;
+        }
+        var messages = JsonSerializer.Deserialize<List<Message>>(messagesJson)!;
+        var newMessages = messages.Where(m => !previousMessageIds.Contains(m.Id)).ToArray();
 
-            if (newMessages.Length > 0)
+        if (newMessages.Length > 0)
+        {
+            foreach (var id in newMessages.Select(x => x.Id))
             {
-                foreach (var id in newMessages.Select(x => x.Id))
-                {
-                    previousMessageIds.Add(id);
-                }
-
-                foreach (var message in newMessages)
-                {
-                    yield return new SseItem<Message>(message)
-                    {
-                        ReconnectionInterval = TimeSpan.FromSeconds(10)
-                    };
-                }
+                previousMessageIds.Add(id);
             }
+
+            foreach (var message in newMessages)
+            {
+                string eventData = $"data: {JsonSerializer.Serialize(message)}\n\n";
+                await context.Response.WriteAsync(eventData, cancellationToken);
+            }
+            await context.Response.Body.FlushAsync(cancellationToken);
         }
     }
-
-    return TypedResults.ServerSentEvents(GetMessages(cancellationToken));
 });
 
 app.Run();
