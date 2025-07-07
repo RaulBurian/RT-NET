@@ -8,3 +8,5 @@ export const API_ROUTES = {
 };
 
 export default API_ROUTES;
+
+export {API_BASE_URL};

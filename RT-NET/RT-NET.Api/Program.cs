@@ -1,7 +1,6 @@
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Microsoft.AspNetCore.WebSockets;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Caching.Distributed;
 using RT_NET.Api;
 
@@ -15,16 +14,12 @@ builder.Services.AddCors(opts =>
     {
         policy.AllowAnyHeader();
         policy.AllowAnyMethod();
-        policy.AllowAnyOrigin();
+        policy.SetIsOriginAllowed(_ => true);
+        policy.AllowCredentials();
     });
 });
 builder.Services.AddStackExchangeRedisCache(options => { options.Configuration = builder.Configuration.GetConnectionString("redis"); });
-builder.Services.AddWebSockets(opts =>
-{
-    opts.KeepAliveInterval = TimeSpan.FromMinutes(1);
-});
-builder.Services.AddSingleton<WebSocketConnectionManager>();
-builder.Services.AddSingleton<WebSocketHandler>();
+builder.Services.AddSignalR();
 
 var app = builder.Build();
 
@@ -50,7 +45,7 @@ app.MapGet("/messages", async (IDistributedCache cache) =>
     return Results.Ok(messages);
 });
 
-app.MapPost("/messages", async (MessageRequest messageRequest, IDistributedCache cache) =>
+app.MapPost("/messages", async (MessageRequest messageRequest, IDistributedCache cache, IHubContext<MessagesHub> hubContext) =>
 {
     var message = new Message
     {
@@ -71,6 +66,8 @@ app.MapPost("/messages", async (MessageRequest messageRequest, IDistributedCache
 
     var updatedMessagesJson = JsonSerializer.Serialize(messages);
     await cache.SetStringAsync("messages", updatedMessagesJson);
+
+    await hubContext.Clients.All.SendAsync("ReceiveMessage", message.Name, message.Text);
 
     return Results.Created($"/messages/{message.Id}", message);
 });
@@ -95,22 +92,7 @@ app.MapGet("/messages/{id}", async (string id, IDistributedCache cache) =>
     return Results.Ok(message);
 });
 
-app.UseWebSockets();
-
-app.Map("/ws", async context =>
-{
-    if (context.WebSockets.IsWebSocketRequest)
-    {
-        using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
-        var handler = context.RequestServices.GetRequiredService<WebSocketHandler>();
-        await handler.HandleConnection(webSocket);
-    }
-    else
-    {
-        context.Response.StatusCode = 400;
-    }
-});
-
+app.MapHub<MessagesHub>("/messagesHub");
 
 app.Run();
 

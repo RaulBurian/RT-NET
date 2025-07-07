@@ -1,6 +1,7 @@
 ﻿import { useState, useRef, useEffect } from 'react';
 import './Chat.css';
-import API_ROUTES from "../Common/Commons";
+import API_ROUTES, {API_BASE_URL} from "../Common/Commons";
+import {HubConnection, HubConnectionBuilder} from '@microsoft/signalr';
 
 interface Message {
   id: number;
@@ -14,7 +15,7 @@ function Chat({ userName, onLogout }) {
   const currentMessages = useRef<Message[]>(messages);
   const [newMessage, setNewMessage] = useState<string>('');
   const messagesEndRef = useRef<HTMLElement>(null);
-  const webSocketRef = useRef<WebSocket>(null);
+  const signalRRef = useRef<HubConnection>(null);
 
   useEffect(() => {
     const getData = async ()=>{
@@ -28,32 +29,20 @@ function Chat({ userName, onLogout }) {
 
     getData();
 
-    const ws = new WebSocket('ws://localhost:5000/ws');
-    webSocketRef.current = ws;
+    const connection = new HubConnectionBuilder()
+        .withUrl(`${API_BASE_URL}/messagesHub`)
+        .build();
 
-    ws.addEventListener('open', (event) => {
-      console.log('Connected to WebSocket server');
+    signalRRef.current = connection;
+
+    connection.start()
+        .then(() => console.log('Connected to SignalR hub'))
+        .catch(err => console.error('Error connecting to hub:', err));
+
+    connection.on('ReceiveMessage', (id, name, text) => {
+
+      setMessages(prev => [...prev, {id, name, text, owner: name === userName }]);
     });
-
-    ws.addEventListener('message', (event) => {
-      const message = JSON.parse(JSON.parse(event.data)) as Message;
-
-      setMessages(prevMessages => {
-        if (prevMessages.some(m => m.id === message.id)) {
-          return prevMessages;
-        }
-
-        message.owner = message.name === userName;
-        return [...prevMessages, message];
-      });
-
-    });
-
-    return () => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.close();
-      }
-    }
   }, [userName]);
 
   useEffect(() => {
@@ -68,11 +57,7 @@ function Chat({ userName, onLogout }) {
   const handleSendMessage = async () => {
     if (newMessage.trim() === '') return;
 
-    webSocketRef.current.send(JSON.stringify({
-      text: newMessage,
-      name: userName
-    }));
-
+    await signalRRef.current.invoke('SendMessage', userName, newMessage)
     setNewMessage('');
   };
 
