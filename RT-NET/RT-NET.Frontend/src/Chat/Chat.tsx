@@ -1,7 +1,7 @@
-﻿import { useState, useRef, useEffect } from 'react';
+﻿import {useEffect, useRef, useState} from 'react';
 import './Chat.css';
 import API_ROUTES, {API_BASE_URL} from "../Common/Commons";
-import {HubConnection, HubConnectionBuilder} from '@microsoft/signalr';
+import {HttpTransportType, HubConnection, HubConnectionBuilder, RetryContext} from '@microsoft/signalr';
 
 interface Message {
   id: number;
@@ -30,7 +30,15 @@ function Chat({ userName, onLogout }) {
     getData();
 
     const connection = new HubConnectionBuilder()
-        .withUrl(`${API_BASE_URL}/messagesHub`)
+        .withUrl(`${API_BASE_URL}/messagesHub`, {
+          transport: HttpTransportType.WebSockets,
+          skipNegotiation: true,
+        })
+        .withAutomaticReconnect({
+          nextRetryDelayInMilliseconds(retryContext: RetryContext): number | null {
+            return retryContext.previousRetryCount * 1000;
+          }
+        })
         .build();
 
     signalRRef.current = connection;
