@@ -51,7 +51,8 @@ app.MapPost("/messages", async (MessageRequest messageRequest, IDistributedCache
     {
         Id = Guid.CreateVersion7().ToString(),
         Text = messageRequest.Text,
-        Name = messageRequest.Name
+        Name = messageRequest.Name,
+        InstanceId = Instance.Id
     };
 
     var messagesJson = await cache.GetStringAsync("messages");
@@ -115,4 +116,12 @@ class Message
 
     [JsonPropertyName("name")]
     public required string Name { get; set; }
+
+    [JsonPropertyName("instanceId")]
+    public required string InstanceId { get; set; }
+}
+
+static class Instance
+{
+    public static string Id { get; } = Guid.NewGuid().ToString();
 }

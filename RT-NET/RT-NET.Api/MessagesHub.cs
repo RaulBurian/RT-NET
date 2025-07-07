@@ -28,11 +28,12 @@ public class MessagesHub : Hub
         {
             Id = id,
             Text = text,
-            Name = name
+            Name = name,
+            InstanceId = Instance.Id
         });
 
         await _cache.SetStringAsync("messages", JsonSerializer.Serialize(messages));
 
-        await Clients.All.SendAsync("ReceiveMessage", id, name, text);
+        await Clients.All.SendAsync("ReceiveMessage", id, name, text, Instance.Id);
     }
 }

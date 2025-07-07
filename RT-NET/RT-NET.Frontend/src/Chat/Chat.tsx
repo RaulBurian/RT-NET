@@ -8,6 +8,7 @@ interface Message {
   text: string;
   name: string;
   owner: boolean;
+  instanceId: string;
 }
 
 function Chat({ userName, onLogout }) {
@@ -47,9 +48,9 @@ function Chat({ userName, onLogout }) {
         .then(() => console.log('Connected to SignalR hub'))
         .catch(err => console.error('Error connecting to hub:', err));
 
-    connection.on('ReceiveMessage', (id, name, text) => {
+    connection.on('ReceiveMessage', (id, name, text, instanceId) => {
 
-      setMessages(prev => [...prev, {id, name, text, owner: name === userName }]);
+      setMessages(prev => [...prev, {id, name, text, owner: name === userName , instanceId }]);
     });
   }, [userName]);
 
@@ -94,7 +95,7 @@ function Chat({ userName, onLogout }) {
                   key={message.id}
                   className={`message-wrapper ${message.owner ? 'owner-wrapper' : 'other-wrapper'}`}
               >
-                <div className="message-name">{message.name}</div>
+                <div className="message-name">{message.name} - {message.instanceId}</div>
                 <div className={`message ${message.owner ? 'owner-message' : 'other-message'}`}>
                   {message.text}
                 </div>
