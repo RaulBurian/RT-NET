@@ -25,6 +25,8 @@ function Chat({ userName, onLogout }) {
     }
 
     getData();
+
+    setInterval(getData, 3000);
   }, []);
 
   useEffect(() => {
