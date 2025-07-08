@@ -48,8 +48,6 @@ local.settings.json
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
-# Properties folder
-[Pp]roperties/
 
 # Build results
 [Dd]ebug/
