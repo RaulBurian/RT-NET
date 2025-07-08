@@ -20,6 +20,7 @@
     <ItemGroup>
       <_ContentIncludedByDefault Remove="wwwroot\assets\index-DOojs13V.css" />
       <_ContentIncludedByDefault Remove="wwwroot\assets\index-DYhkTFq8.js" />
+      <_ContentIncludedByDefault Remove="wwwroot\assets\index-BzaIdZEs.js" />
     </ItemGroup>
 
 </Project>

@@ -43,6 +43,7 @@ var app = builder.Build();
 
 app.MapOpenApi();
 
+app.UseCors();
 app.UseStaticFiles();
 
 app.UseSwaggerUI(opts =>
