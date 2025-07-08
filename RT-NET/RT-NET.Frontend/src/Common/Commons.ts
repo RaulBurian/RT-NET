@@ -1,4 +1,4 @@
-﻿const API_BASE_URL = 'http://localhost:5000';
+﻿const API_BASE_URL = 'https://rt-net.azurewebsites.net';
 
 export const API_ROUTES = {
     MESSAGES: {

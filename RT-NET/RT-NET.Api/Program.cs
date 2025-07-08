@@ -2,12 +2,26 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.OpenApi.Models;
 using RT_NET.Api;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(opts =>
+{
+    opts.AddDocumentTransformer((document, _, _) =>
+    {
+        document.Servers.Clear();
+        document.Servers.Add(new OpenApiServer
+        {
+            Url = builder.Configuration["ServerUrl"] ?? "http://localhost:5000"
+        });
+
+        return Task.CompletedTask;
+    });
+});
+builder.Services.AddApplicationInsightsTelemetry();
 builder.Services.AddCors(opts =>
 {
     opts.AddDefaultPolicy(policy =>
@@ -18,13 +32,19 @@ builder.Services.AddCors(opts =>
         policy.AllowCredentials();
     });
 });
-builder.Services.AddStackExchangeRedisCache(options => { options.Configuration = builder.Configuration.GetConnectionString("redis"); });
-builder.Services.AddSignalR();
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = builder.Configuration["REDISCACHECONNSTR_redis"];
+});
+builder.Services.AddSignalR()
+    .AddStackExchangeRedis(builder.Configuration["REDISCACHECONNSTR_redis"]!);
 
 var app = builder.Build();
 
-app.UseCors();
 app.MapOpenApi();
+
+app.UseStaticFiles();
+
 app.UseSwaggerUI(opts =>
 {
     opts.SwaggerEndpoint("/openapi/v1.json", "RT-NET API");
@@ -92,6 +112,8 @@ app.MapGet("/messages/{id}", async (string id, IDistributedCache cache) =>
 
     return Results.Ok(message);
 });
+
+app.MapGet("/health", () => Results.Ok()).ExcludeFromDescription();
 
 app.MapHub<MessagesHub>("/messagesHub");
 

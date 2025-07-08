@@ -6,13 +6,20 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <NoDefaultLaunchSettingsFile>True</NoDefaultLaunchSettingsFile>
         <RootNamespace>RT_NET.Api</RootNamespace>
+        <UserSecretsId>4c39c547-5495-4a85-bfa8-4a1c4d48b7b9</UserSecretsId>
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.23.0" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.1"/>
         <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="9.0.6" />
         <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="9.0.6" />
         <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="9.0.1" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <_ContentIncludedByDefault Remove="wwwroot\assets\index-DOojs13V.css" />
+      <_ContentIncludedByDefault Remove="wwwroot\assets\index-DYhkTFq8.js" />
     </ItemGroup>
 
 </Project>

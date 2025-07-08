@@ -31,10 +31,7 @@ function Chat({ userName, onLogout }) {
     getData();
 
     const connection = new HubConnectionBuilder()
-        .withUrl(`${API_BASE_URL}/messagesHub`, {
-          transport: HttpTransportType.WebSockets,
-          skipNegotiation: true,
-        })
+        .withUrl(`${API_BASE_URL}/messagesHub`)
         .withAutomaticReconnect({
           nextRetryDelayInMilliseconds(retryContext: RetryContext): number | null {
             return retryContext.previousRetryCount * 1000;
